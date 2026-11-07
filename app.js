@@ -7,15 +7,22 @@
   const input = document.getElementById("new-task");
   const list = document.getElementById("task-list");
   const empty = document.getElementById("empty");
+  const emptyText = document.getElementById("empty-text");
   const counter = document.getElementById("counter");
   const clearDone = document.getElementById("clear-done");
+  const progress = document.getElementById("progress");
+  const progressFill = document.getElementById("progress-fill");
+  const progressTrack = document.getElementById("progress-track");
+  const progressValue = document.getElementById("progress-value");
   const filterButtons = Array.from(document.querySelectorAll(".filters__btn"));
 
   /** @type {{id: string, text: string, done: boolean}[]} */
   let tasks = loadTasks();
   let filter = "all";
 
-  /* ---------- Storage ---------- */
+  /* ------------------------------------------------------------
+     Хранилище
+     ------------------------------------------------------------ */
 
   function loadTasks() {
     try {
@@ -24,7 +31,7 @@
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed)) return [];
       return parsed
-        .filter((t) => t && typeof t.text === "string")
+        .filter((t) => t && typeof t.text === "string" && t.text.trim())
         .map((t) => ({
           id: String(t.id ?? createId()),
           text: t.text,
@@ -48,7 +55,9 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
-  /* ---------- Rendering ---------- */
+  /* ------------------------------------------------------------
+     Отрисовка
+     ------------------------------------------------------------ */
 
   function visibleTasks() {
     if (filter === "active") return tasks.filter((t) => !t.done);
@@ -57,28 +66,13 @@
   }
 
   function render() {
-    const items = visibleTasks();
     list.textContent = "";
 
     const fragment = document.createDocumentFragment();
-    for (const task of items) fragment.appendChild(renderTask(task));
+    for (const task of visibleTasks()) fragment.appendChild(renderTask(task));
     list.appendChild(fragment);
 
-    const hasAny = tasks.length > 0;
-    empty.hidden = items.length > 0;
-    empty.textContent = hasAny
-      ? filter === "done"
-        ? "Выполненных задач пока нет."
-        : "Все задачи выполнены. Отличная работа!"
-      : "Пока пусто — добавьте первую задачу.";
-
-    const left = tasks.filter((t) => !t.done).length;
-    const doneCount = tasks.length - left;
-    counter.textContent = hasAny
-      ? `${left} ${plural(left, ["задача", "задачи", "задач"])} осталось`
-      : "Нет задач";
-
-    clearDone.disabled = doneCount === 0;
+    updateMeta();
   }
 
   function renderTask(task) {
@@ -90,8 +84,8 @@
     check.type = "checkbox";
     check.className = "task__check";
     check.checked = task.done;
-    check.setAttribute("aria-label", task.done ? "Отметить как невыполненную" : "Отметить как выполненную");
-    check.addEventListener("change", () => toggleTask(task.id));
+    check.setAttribute("aria-label", checkLabel(task));
+    check.addEventListener("change", () => toggleTask(task.id, check));
 
     const text = document.createElement("span");
     text.className = "task__text";
@@ -106,39 +100,142 @@
     del.innerHTML =
       '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">' +
       '<path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" ' +
-      'stroke-width="1.8" stroke-linecap="round"/></svg>';
+      'stroke-width="1.9" stroke-linecap="round"/></svg>';
     del.addEventListener("click", () => removeTask(task.id));
 
     li.append(check, text, del);
     return li;
   }
 
-  /* ---------- Actions ---------- */
+  function checkLabel(task) {
+    return task.done ? "Отметить как невыполненную" : "Отметить как выполненную";
+  }
+
+  /** Счётчик, прогресс, состояние кнопок и пустого блока. */
+  function updateMeta() {
+    const total = tasks.length;
+    const doneCount = tasks.filter((t) => t.done).length;
+    const left = total - doneCount;
+
+    // Счётчик
+    counter.textContent = "";
+    if (total === 0) {
+      counter.textContent = "Нет задач";
+    } else if (left === 0) {
+      counter.textContent = "Всё готово";
+    } else {
+      const num = document.createElement("b");
+      num.className = "counter__num";
+      num.textContent = String(left);
+      counter.append(num, ` ${plural(left, ["задача", "задачи", "задач"])} осталось`);
+    }
+
+    // Прогресс
+    progress.hidden = total === 0;
+    if (total > 0) {
+      const percent = Math.round((doneCount / total) * 100);
+      progressFill.style.width = percent + "%";
+      progressValue.textContent = `${doneCount} / ${total}`;
+      progressTrack.setAttribute("aria-valuenow", String(percent));
+    }
+
+    // Кнопка очистки
+    clearDone.disabled = doneCount === 0;
+
+    // Пустой блок
+    const items = visibleTasks().length;
+    empty.hidden = items > 0;
+    if (total === 0) {
+      emptyText.textContent = "Пока пусто — добавьте первую задачу.";
+    } else if (filter === "done") {
+      emptyText.textContent = "Выполненных задач пока нет.";
+    } else if (filter === "active" && left === 0) {
+      emptyText.textContent = "Все задачи выполнены. Отличная работа!";
+    } else {
+      emptyText.textContent = "Здесь пока ничего нет.";
+    }
+  }
+
+  /* ------------------------------------------------------------
+     Действия
+     ------------------------------------------------------------ */
 
   function addTask(rawText) {
     const text = rawText.trim();
-    if (!text) return;
+    if (!text) {
+      input.focus();
+      return;
+    }
+
     tasks.unshift({ id: createId(), text, done: false });
-    // Showing a freshly added task regardless of the current filter.
-    if (filter === "done") setFilter("all");
+    // Новая задача должна быть видна при любом фильтре.
+    if (filter !== "all" && filter !== "active") setFilter("all", true);
     saveTasks();
     render();
+
     input.value = "";
     input.focus();
   }
 
-  function toggleTask(id) {
+  function toggleTask(id, checkbox) {
     const task = tasks.find((t) => t.id === id);
     if (!task) return;
+
     task.done = !task.done;
+    saveTasks();
+
+    if (filter === "all") {
+      // Обновляем строку на месте — без перерисовки и мигания.
+      const li = checkbox.closest(".task");
+      if (li) li.classList.toggle("is-done", task.done);
+      checkbox.setAttribute("aria-label", checkLabel(task));
+      updateMeta();
+    } else {
+      // Строка больше не соответствует фильтру — убираем её плавно.
+      const li = checkbox.closest(".task");
+      animateOut(li, render);
+    }
+  }
+
+  function removeTask(id) {
+    const li = list.querySelector(`.task[data-id="${id}"]`);
+    const commit = () => {
+      tasks = tasks.filter((t) => t.id !== id);
+      saveTasks();
+      render();
+    };
+    animateOut(li, commit);
+  }
+
+  function clearCompleted() {
+    tasks = tasks.filter((t) => !t.done);
     saveTasks();
     render();
   }
 
-  function removeTask(id) {
-    tasks = tasks.filter((t) => t.id !== id);
-    saveTasks();
-    render();
+  /** Плавное схлопывание строки перед обновлением состояния. */
+  function animateOut(li, callback) {
+    if (!li) return callback();
+
+    let called = false;
+    const done = () => {
+      if (called) return;
+      called = true;
+      callback();
+    };
+
+    // Фиксируем текущую высоту, иначе max-height: 0 не анимируется от auto.
+    const height = li.offsetHeight;
+    li.style.maxHeight = height + "px";
+    void li.offsetHeight; // принудительный reflow
+
+    li.classList.add("is-removing");
+    li.style.maxHeight = "0px";
+
+    li.addEventListener("transitionend", (e) => {
+      if (e.propertyName === "max-height") done();
+    });
+    setTimeout(done, 340);
   }
 
   function startEdit(li, task) {
@@ -161,7 +258,7 @@
       if (finished) return;
       finished = true;
       const value = field.value.trim();
-      if (value) {
+      if (value && value !== task.text) {
         task.text = value;
         saveTasks();
       }
@@ -181,12 +278,12 @@
     field.addEventListener("blur", commit);
   }
 
-  function setFilter(next) {
+  function setFilter(next, silent) {
     filter = next;
     filterButtons.forEach((btn) =>
       btn.classList.toggle("is-active", btn.dataset.filter === filter)
     );
-    render();
+    if (!silent) render();
   }
 
   function plural(n, forms) {
@@ -197,7 +294,9 @@
     return forms[2];
   }
 
-  /* ---------- Events ---------- */
+  /* ------------------------------------------------------------
+     События
+     ------------------------------------------------------------ */
 
   form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -208,26 +307,25 @@
     btn.addEventListener("click", () => setFilter(btn.dataset.filter))
   );
 
-  clearDone.addEventListener("click", () => {
-    tasks = tasks.filter((t) => !t.done);
-    saveTasks();
-    render();
-  });
+  clearDone.addEventListener("click", clearCompleted);
 
-  // Sync between tabs/windows.
+  // Синхронизация между вкладками.
   window.addEventListener("storage", (e) => {
     if (e.key !== STORAGE_KEY) return;
     tasks = loadTasks();
     render();
   });
 
-  /* ---------- Init ---------- */
+  /* ------------------------------------------------------------
+     Старт
+     ------------------------------------------------------------ */
 
   const today = new Intl.DateTimeFormat("ru-RU", {
     weekday: "long",
     day: "numeric",
     month: "long",
   }).format(new Date());
+
   document.getElementById("today").textContent =
     today.charAt(0).toUpperCase() + today.slice(1);
 
