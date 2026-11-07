@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#fafafa">
+  <title>Список задач</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="app__header">
+      <h1 class="app__title">Список задач</h1>
+      <p class="app__subtitle" id="today"></p>
+    </header>
+
+    <form class="add" id="add-form" autocomplete="off">
+      <input
+        class="add__input"
+        id="new-task"
+        type="text"
+        placeholder="Что нужно сделать?"
+        aria-label="Новая задача"
+        maxlength="200"
+      >
+      <button class="add__button" type="submit" aria-label="Добавить задачу">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </form>
+
+    <ul class="tasks" id="task-list" aria-live="polite"></ul>
+
+    <p class="empty" id="empty" hidden>
+      Пока пусто — добавьте первую задачу.
+    </p>
+
+    <footer class="app__footer">
+      <span class="counter" id="counter">0 задач</span>
+      <div class="filters" role="group" aria-label="Фильтр задач">
+        <button class="filters__btn is-active" type="button" data-filter="all">Все</button>
+        <button class="filters__btn" type="button" data-filter="active">Активные</button>
+        <button class="filters__btn" type="button" data-filter="done">Выполненные</button>
+      </div>
+      <button class="clear" id="clear-done" type="button">Очистить выполненные</button>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
